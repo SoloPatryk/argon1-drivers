@@ -6,5 +6,6 @@ Type=simple
 Restart=always
 RemainAfterExit=true
 ExecStart=/usr/local/bin/argononed
+ExecStop=/usr/local/bin/argononed-poweroff
 [Install]
 WantedBy=multi-user.target
