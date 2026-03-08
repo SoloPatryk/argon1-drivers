@@ -48,16 +48,23 @@ install_argonone() {
 		fi
 		apk add py3-rpigpio py3-smbus i2c-tools
 
-		echo "Updating configuration ..."
 		# Updating configurations, so argononed has access to devices hardware
+		changedConfiguration=0
 		if ! grep -q "dtparam=i2c" /boot/usercfg.txt; then
 			echo "dtparam=i2c_arm=on" >>/boot/usercfg.txt
+			changedConfiguration=1
 		fi
 		if ! grep -q "enable_uart=1" /boot/usercfg.txt; then
 			echo "enable_uart=1" >>/boot/usercfg.txt
+			changedConfiguration=1
 		fi
 		if ! grep -q "i2c-dev" /etc/modules; then
 			echo "i2c-dev" >>/etc/modules
+			changedConfiguration=1
+		fi
+		if [ $changedConfiguration = 1 ]; then
+			echo "Updated system configuration."
+			echo "To apply it device needs to be restarted."
 		fi
 	fi
 
@@ -91,10 +98,10 @@ install_argonone() {
 		systemctl start ${daemonName}
 	elif [ $ID = "alpine" ]; then
 		rc-update add ${daemonName} default
-		# rc-service ${daemonName} start
+		rc-service ${daemonName} start
 	fi
 
-	echo "Install will complete after restarting the device."
+	echo "Install has completed. Reboot might be required."
 }
 
 uninstall_argonone() {
