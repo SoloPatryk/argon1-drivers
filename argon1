@@ -98,8 +98,6 @@ echo "Installing dependencies ..."
 }
 
 uninstall_argonone() {
-	rm -f ${powerButtonScript}
-	rm -f ${shutdownScript}
 	if [ $ID = "ubuntu" ]; then
 		systemctl stop ${daemonName}
 		systemctl disable ${daemonName}
@@ -111,6 +109,8 @@ uninstall_argonone() {
 	if [ $ID = "ubuntu" ]; then
 		systemctl daemon-reload
 	fi
+	rm -f ${powerButtonScript}
+	rm -f ${shutdownScript}
 	rm -f ${daemonConfigFile}
 	echo "Removed Argon One Services."
 	echo "Cleanup will complete after restarting the device."
