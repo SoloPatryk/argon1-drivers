@@ -37,7 +37,7 @@ def shutdown_check():
         if pulsetime >= 2 and pulsetime <= 3:
             run('reboot')
         elif pulsetime >= 4 and pulsetime <= 5:
-            run('shutdown now -h')
+            run('poweroff')
 
 
 def get_fanspeed(tempval, configlist):

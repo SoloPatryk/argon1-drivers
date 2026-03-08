@@ -1,7 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/sh
+
+. /etc/os-release
 
 # Display help usage
-function usage() {
+usage() {
 	cat <<EOM
 Usage: ${0} [OPTION]
 
@@ -13,8 +15,8 @@ Options:
 EOM
 }
 
-function config_argonone() {
-	if [[ -f "${daemonConfigFile}" ]]; then
+config_argonone() {
+	if [ -f "${daemonConfigFile}" ]; then
 		echo "Current Argon fan configuration:"
 		echo
 		cat "${daemonConfigFile}"
@@ -26,13 +28,19 @@ function config_argonone() {
 	fi
 	echo
 	echo "Edit ${daemonConfigFile} to change your fan curve and then run"
-	echo "sudo 'systemctl restart argononed.service' to activate the changes."
+	echo "sudo systemctl restart $daemonName to activate the changes."
+	# TODO: Show openrc syntax when user is using alpine
 }
 
-function install_argonone() {
-	apt install -y python3-rpi.gpio python3-smbus i2c-tools
+install_argonone() {
+	if [ $ID = "ubuntu" ]; then
+		apt install -y python3-rpi.gpio python3-smbus i2c-tools
+	elif [ $ID = "alpine" ]; then
+		# TODO: Check if there are added community repos, as these packages are dependent on them
+		apk add py3-rpigpio py3-smbus i2c-tools
+	fi
 
-	if [[ ! -f "${daemonConfigFile}" ]]; then
+	if [ ! -f "${daemonConfigFile}" ]; then
 		# Create config file for fan speed
 		install -Dm644 "${sourceFilesDir}/${daemonConfigFileFilename}" "${daemonConfigFile}"
 	fi
@@ -44,65 +52,83 @@ function install_argonone() {
 	install -Dm755 "${sourceFilesDir}/${powerButtonScriptFilename}" "${powerButtonScript}"
 
 	# Stop the service if it is already present.
-	if [[ -f "${daemonFanService}" ]]; then
-		systemctl stop ${daemonName}.service
+	if [ -f "${daemonFanService}" ]; then
+		if [ $ID = "ubuntu" ]; then
+			systemctl stop ${daemonName}
+		elif [ $ID = "alpine" ]; then
+			rc-service ${daemonName} stop
+			rc-update del ${daemonName} default
+		fi
 	fi
 
 	# Create daemon service, running argononed
-	install -Dm644 "${sourceFilesDir}/${daemonFanServiceFilename}" "${daemonFanService}"
+	install -Dm755 "${sourceFilesDir}/${daemonFanServiceFilename}" "${daemonFanService}"
 
-	systemctl daemon-reload
-	systemctl enable ${daemonName}.service
-	systemctl start ${daemonName}.service
+	if [ $ID = "ubuntu" ]; then
+		systemctl daemon-reload
+		systemctl enable ${daemonName}
+		systemctl start ${daemonName}
+	elif [ $ID = "alpine" ]; then
+		rc-update add ${daemonName} default
+		rc-service ${daemonName} start
+	fi
 }
 
-function uninstall_argonone() {
+uninstall_argonone() {
 	rm -f ${powerButtonScript}
 	rm -f ${shutdownScript}
-	systemctl stop ${daemonName}.service
-	systemctl disable ${daemonName}.service
+	if [ $ID = "ubuntu" ]; then
+		systemctl stop ${daemonName}
+		systemctl disable ${daemonName}
+	elif [ $ID = "alpine" ]; then
+		rc-service ${daemonName} stop
+		rc-update del ${daemonName} default
+	fi
 	rm -f ${daemonFanService}
-	systemctl daemon-reload
+	if [ $ID = "ubuntu" ]; then
+		systemctl daemon-reload
+	fi
 	rm -f ${daemonConfigFile}
 	echo "Removed Argon One Services."
 	echo "Cleanup will complete after restarting the device."
 }
 
 # Check number of command line arguments
-if [[ $# -lt 1 ]]; then
+if [ $# -lt 1 ]; then
 	usage >&2
 	exit 1
-elif [[ $# -gt 1 ]]; then
+elif [ $# -gt 1 ]; then
 	echo "[!] ERROR: Too many arguments."
 	usage >&2
 	exit 1
 fi
 
 # Check if the user running the script is root
-if [[ "$(id -u)" -ne 0 ]]; then
+if [ "$(id -u)" -ne 0 ]; then
 	echo "[!] ERROR: You need to be root."
 	exit 1
 fi
 
-if [[ "${HOSTTYPE}" != "arm" ]] && [[ "${HOSTTYPE}" != "aarch64" ]]; then
+if [ ! $HOSTTYPE = "arm" ] && [ ! $HOSTTYPE = "aarch64" ]; then
 	echo "[!] ERROR: This script is only intended to run on ARM devices."
 	exit 1
 fi
 
 # Check if we're running on a Raspberry Pi
-if [[ -e /proc/device-tree/model ]]; then
-	read -r -d $'\0' PI_MODEL </proc/device-tree/model
+if [ -e /proc/device-tree/model ]; then
+	PI_MODEL="$(cat /proc/device-tree/model)"
 fi
-if [[ ! "${PI_MODEL:-}" =~ ^Raspberry.Pi.*$ ]]; then
+case "${PI_MODEL}" in
+Raspberry*) ;;
+*)
 	echo "[!] ERROR: This is not a Raspberry Pi."
 	exit 1
-fi
+	;;
+esac
 
-# Check if we're running Ubuntu
-IS_UBUNTU=$(lsb_release -is)
-if [[ "${IS_UBUNTU}" != "Ubuntu" ]]; then
-	echo "[!] ERROR: This script is only intended to run on Ubuntu."
-	exit 1
+if [ ! $ID = "ubuntu" ] && [ ! $ID = "alpine" ]; then
+	echo "[!] ERROR: This is not a Ubuntu/Alpine."
+	# TODO: add -f override option
 fi
 
 daemonName="argononed"
@@ -111,10 +137,17 @@ powerButtonScriptFilename="${daemonName}"
 powerButtonScript="/usr/local/bin/${powerButtonScriptFilename}"
 shutdownScriptFilename="${daemonName}-poweroff"
 shutdownScript="/lib/systemd/system-shutdown/${shutdownScriptFilename}"
+if [ $ID = "alpine" ]; then
+	shutdownScript="/usr/local/bin/${shutdownScriptFilename}"
+fi
 daemonConfigFileFilename="${daemonName}.conf"
 daemonConfigFile="/etc/${daemonConfigFileFilename}"
 daemonFanServiceFilename="${daemonName}.service"
 daemonFanService="/lib/systemd/system/${daemonFanServiceFilename}"
+if [ $ID = "alpine" ]; then
+	daemonFanServiceFilename="${daemonName}-rc-run"
+	daemonFanService="/etc/init.d/${daemonName}"
+fi
 
 # Parse command line arguments
 case "${1}" in
@@ -136,7 +169,7 @@ case "${1}" in
 	;;
 *)
 	echo "[!] ERROR: \"${1}\" is not a supported parameter." >&2
-	usage >@2
+	usage >&2
 	exit 1
 	;;
 esac
