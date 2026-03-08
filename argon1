@@ -5,13 +5,13 @@
 # Display help usage
 usage() {
 	cat <<EOM
-Usage: ${0} [OPTION]
+Usage: ${0} [MODE]
 
-Options:
-  -c, --config      Display current fan configuration
-  -i, --install     Install the Argon ONE Case Fan / Argon FanHAT driver
-  -u, --uninstall   Uninstall the Argon ONE Case Fan / Argon FanHAT driver
-  -h, --help        Display this usage information
+Modes:
+  c, config         Display current fan configuration
+  i, install        Install the Argon ONE Case Fan / Argon FanHAT driver
+  u, rm, uninstall  Uninstall the Argon ONE Case Fan / Argon FanHAT driver
+  h, help           Display this usage information
 EOM
 }
 
@@ -159,19 +159,19 @@ fi
 
 # Parse command line arguments
 case "${1}" in
--c | --config)
+c | config)
 	config_argonone
 	exit 0
 	;;
--i | --install)
+i | install)
 	install_argonone
 	exit 0
 	;;
--u | --uninstall)
+u | rm | uninstall)
 	uninstall_argonone
 	exit 0
 	;;
--h | --help)
+h | help)
 	usage
 	exit 0
 	;;
